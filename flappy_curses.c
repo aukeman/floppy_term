@@ -29,12 +29,27 @@ struct bird_info_t {
   float velocity_rows_per_frame;
 };
 
+struct particle_info_t {
+  
+  int time_to_live_frames;
+
+  int column_idx;
+  int row_idx;
+
+  float column_fractional_idx;
+  float row_fractional_idx;
+
+  float velocity_columns_per_frame;
+  float velocity_rows_per_frame;
+};
+
 struct game_physics_t {
   float impulse_velocity_rows_per_frame;
   float gravity_rows_per_frame_sq;
   float pipe_velocity_columns_per_frame;
 
   useconds_t frame_interval;
+  float frame_interval_sec;
 };
 
 struct score_t {
@@ -95,10 +110,6 @@ const char* upper_pipe_end         = "[[    ]]";
 
 void initialize_physics( struct game_physics_t* );
 
-void initialize_pipe( struct pipe_info_t*, int column_idx );
-void draw_pipe( const struct pipe_info_t* );
-void update_pipe( struct pipe_info_t*, const struct game_physics_t* );
-
 enum game_state_e {
   TITLE_SCREEN,
   PLAY,
@@ -118,7 +129,16 @@ int play( int flap,
 	  struct score_t* score, 
 	  const struct game_physics_t* );
 
-int boom( struct bird_info_t*, struct pipe_info_t*, int number_of_pipes );
+int boom( struct particle_info_t*, 
+	  int number_of_particles, 
+	  const struct pipe_info_t*, 
+	  int number_of_pipes,
+	  const struct game_physics_t*,
+	  const struct score_t* );
+
+void initialize_pipe( struct pipe_info_t*, int column_idx );
+void draw_pipe( const struct pipe_info_t* );
+void update_pipe( struct pipe_info_t*, const struct game_physics_t* );
 
 void initialize_bird( struct bird_info_t*, 
 		      int row_idx,
@@ -128,6 +148,18 @@ void draw_bird( const struct bird_info_t* );
 void update_bird( struct bird_info_t*, 
 		  int flap, 
 		  const struct game_physics_t* );
+
+void initialize_particles( struct particle_info_t*,
+			   int number_of_particles,
+			   const struct game_physics_t*,
+			   const struct bird_info_t* );
+
+void draw_particles( struct particle_info_t*,
+		     int number_of_particles );
+
+void update_particles( struct particle_info_t*,
+		       int number_of_particles,
+		       const struct game_physics_t* );
 
 enum collision_result_e {
   NONE,
@@ -156,6 +188,9 @@ int main()
   const size_t number_of_pipes = 2;
   struct pipe_info_t pipes[number_of_pipes];
 
+  const size_t number_of_particles = 10;
+  struct particle_info_t particles[number_of_particles];
+
   int keep_looping = 1;
   int flap = 0;
 
@@ -180,7 +215,10 @@ int main()
     case TITLE_SCREEN:
 
       if ( title_screen( flap, &score ) ){
-	initialize_game( &bird_info, pipes, number_of_pipes, &score );
+	initialize_game( &bird_info, 
+			 pipes, 
+			 number_of_pipes, 
+			 &score );
 	game_state = PLAY;
       }
       break;
@@ -193,13 +231,22 @@ int main()
 		 &score,
 		 &game_physics ) ){
 
+	initialize_particles( particles,
+			      number_of_particles,
+			      &game_physics,
+			      &bird_info );
 	game_state = BOOM;
       }
       break;
 
     case BOOM:
 
-      if ( boom( &bird_info, pipes, number_of_pipes ) ){
+      if ( boom( particles, 
+		 number_of_particles, 
+		 pipes, 
+		 number_of_pipes,
+		 &game_physics,
+		 &score ) ){
 	game_state = TITLE_SCREEN;
       }
     }
@@ -236,16 +283,16 @@ void initialize_physics( struct game_physics_t* game_physics ) {
 
   game_physics->frame_interval = 80000;
 
-  const float frame_interval_sec = game_physics->frame_interval*0.000001f;
+  game_physics->frame_interval_sec = game_physics->frame_interval*0.000001f;
 
   game_physics->impulse_velocity_rows_per_frame = 
-    impulse_rows_per_sec * frame_interval_sec;
+    impulse_rows_per_sec * game_physics->frame_interval_sec;
 
   game_physics->gravity_rows_per_frame_sq = 
-    gravity_rows_per_sec_sq * frame_interval_sec;
+    gravity_rows_per_sec_sq * game_physics->frame_interval_sec;
 
   game_physics->pipe_velocity_columns_per_frame = 
-    pipe_velocity_columns_per_sec * frame_interval_sec;
+    pipe_velocity_columns_per_sec * game_physics->frame_interval_sec;
 }
 
 void initialize_pipe( struct pipe_info_t* pipe_info, int column_idx ) {
@@ -436,11 +483,95 @@ enum collision_result_e check_for_collisions( const struct bird_info_t* bird_inf
   return result;
 }
 
+void initialize_particles( struct particle_info_t* particles,
+			   int number_of_particles,
+			   const struct game_physics_t* game_physics,
+			   const struct bird_info_t* bird_info ) {
+
+  int particle_idx = 0;
+  for ( particle_idx = 0;
+	particle_idx < number_of_particles;
+	++particle_idx ) {
+
+    struct particle_info_t* particle = &particles[particle_idx];
+
+    /* 1 to 2 seconds */
+    float time_to_live_sec = 0.1f * (rand() % 10) + 1.0f;
+
+    /* 1 to 10 columns per second */
+    float velocity_columns_per_sec = 0.1f * (rand() % 90) + 1.0f;
+    if ( rand() % 2 ) {
+      velocity_columns_per_sec *= -1.0f;
+    }
+
+    /* 1 to 10 rows per second */
+    float velocity_rows_per_sec = -0.1f * (rand() % 90) + 1.0f;
+
+    particle->time_to_live_frames = 
+      (int)((time_to_live_sec / game_physics->frame_interval_sec) + 0.5f); 
+  
+    particle->velocity_columns_per_frame =
+      (velocity_columns_per_sec * game_physics->frame_interval_sec);
+
+    particle->velocity_rows_per_frame = 
+      (velocity_rows_per_sec * game_physics->frame_interval_sec);
+
+    particle->column_fractional_idx = 
+      particle->column_idx = 
+      bird_info->left_column_idx;
+
+    particle->row_fractional_idx = 
+      particle->row_idx = 
+      bird_info->row_idx;
+  }
+
+  /* at least one particle always lives for 2 seconds so the *boom* is */
+  /* of consistent duration */
+  particles[0].time_to_live_frames = 
+    (int)((2.0 / game_physics->frame_interval_sec) + 0.5f);
+}
+
+void draw_particle( const struct particle_info_t* particle ) {
+
+  if ( 0 < particle->time_to_live_frames && 
+       0 < particle->row_idx && particle->row_idx < number_of_rows &&
+       0 < particle->column_idx && particle->column_idx < number_of_columns ) {
+
+    mvprintw( particle->row_idx,
+	      particle->column_idx,
+	      "X" );
+  }
+}
+
+void update_particle( struct particle_info_t* particle,
+		      const struct game_physics_t* game_physics ) {
+
+  if ( 0 < particle->time_to_live_frames ) {
+
+    particle->time_to_live_frames -= 1;
+
+    particle->column_fractional_idx += 
+      particle->velocity_columns_per_frame;
+
+    particle->velocity_rows_per_frame += 
+      game_physics->gravity_rows_per_frame_sq;
+
+    particle->row_fractional_idx += 
+      particle->velocity_rows_per_frame;
+    
+    particle->column_idx = 
+      (int)(particle->column_fractional_idx + 0.5f);
+
+    particle->row_idx = 
+      (int)(particle->row_fractional_idx + 0.5f);
+  }
+}
+
 int title_screen( int flap, const struct score_t* score ) {
 
   mvprintw( 10, 20, "FLAPPY TERM" );
-  mvprintw( 12, 20, "Current Score: %d", score->current );
-  mvprintw( 14, 20, "Best Score:    %d", score->best );
+  mvprintw( 12, 20, "Last Score: %3d", score->current );
+  mvprintw( 14, 20, "Best Score: %3d", score->best );
 
   mvprintw( 20, 20, "Press SPACEBAR to flap and to start game" );
   mvprintw( 22, 20, "Press 'q' to quit" );
@@ -455,6 +586,8 @@ int initialize_game( struct bird_info_t* bird_info,
   
   int result = 0;
 
+  initialize_bird( bird_info, 10, 20 );
+
   const size_t initial_pipe_column = number_of_columns;
   const size_t pipe_spacing_columns = ((number_of_columns/2) + 
 				       (pipe_width_columns/2));
@@ -467,8 +600,6 @@ int initialize_game( struct bird_info_t* bird_info,
     initialize_pipe( &pipes[pipe_idx], 
 		     initial_pipe_column + (pipe_idx*pipe_spacing_columns ) );
   }
-
-  initialize_bird( bird_info, 10, 20 );
 
   score->current = 0;
 
@@ -520,19 +651,42 @@ int play( int flap,
     break;
   }
 
-  mvprintw( number_of_rows-1, 1, " current: %d  best: %d ", 
-	    score->current, 
-	    score->best);
+  mvprintw( number_of_rows-1, 1, " score: %d ", score->current );
 
   return result;
 }
 
-int boom( struct bird_info_t* bird_info, 
-	  struct pipe_info_t* pipes, 
-	  int number_of_pipes ) {
+int boom( struct particle_info_t* particles, 
+	  int number_of_particles,
+	  const struct pipe_info_t* pipes, 
+	  int number_of_pipes,
+	  const struct game_physics_t* game_physics,
+	  const struct score_t* score ) {
 
   int result = 1;
 
+  int pipe_idx = 0;
+  for ( pipe_idx = 0;
+	pipe_idx < number_of_pipes;
+	++pipe_idx ) {
+    draw_pipe( &pipes[pipe_idx] );
+  }
+
+  int particle_idx = 0;
+  for ( particle_idx = 0;
+	particle_idx < number_of_particles;
+	++particle_idx ) {
+
+    draw_particle( &particles[particle_idx] );
+    update_particle( &particles[particle_idx],
+		     game_physics );
+
+    if ( 0 < particles[particle_idx].time_to_live_frames ) {
+      result = 0;
+    }
+  }
+
+  mvprintw( number_of_rows-1, 1, " score: %d ", score->current );
 
   return result;
 }
