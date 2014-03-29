@@ -194,12 +194,19 @@ int main()
   int keep_looping = 1;
   int flap = 0;
 
+  
+
   initialize_physics( &game_physics );
 
   initscr();
   nodelay(stdscr, TRUE);
-
   curs_set(0);
+  start_color();
+
+  init_pair( 1, COLOR_YELLOW, COLOR_BLACK );
+  init_pair( 2, COLOR_WHITE, COLOR_GREEN );
+  init_pair( 3, COLOR_RED, COLOR_BLACK );
+  init_pair( 4, COLOR_BLUE, COLOR_BLACK );
 
   gettimeofday( &then, NULL );
   
@@ -209,7 +216,9 @@ int main()
 
     clear();
 
+    attron(COLOR_PAIR(4));
     mvprintw( 0, 0, background );
+    attroff(COLOR_PAIR(4));
 
     switch ( game_state ){
     case TITLE_SCREEN:
@@ -352,6 +361,8 @@ void draw_pipe( const struct pipe_info_t* pipe_info ) {
   if ( col_idx < 0 ) {
     col_idx = 0;
   }
+
+  attron(COLOR_PAIR(2));
     
 
   int row_idx = 0;
@@ -381,6 +392,9 @@ void draw_pipe( const struct pipe_info_t* pipe_info ) {
       }
     }
   }
+
+  attroff(COLOR_PAIR(2));
+
 }
 
 void update_pipe( struct pipe_info_t* pipe_info, 
@@ -419,9 +433,12 @@ void initialize_bird( struct bird_info_t* bird_info,
 
 void draw_bird( const struct bird_info_t* bird_info ) {
 
+  attron(COLOR_PAIR(1));
   mvprintw( bird_info->row_idx, 
 	    bird_info->left_column_idx, 
 	    bird );
+  attroff(COLOR_PAIR(1));
+
 }
 
 void update_bird( struct bird_info_t* bird_info, 
@@ -533,6 +550,8 @@ void initialize_particles( struct particle_info_t* particles,
 
 void draw_particle( const struct particle_info_t* particle ) {
 
+  attron(COLOR_PAIR(3));
+
   if ( 0 < particle->time_to_live_frames && 
        0 < particle->row_idx && particle->row_idx < number_of_rows &&
        0 < particle->column_idx && particle->column_idx < number_of_columns ) {
@@ -541,6 +560,8 @@ void draw_particle( const struct particle_info_t* particle ) {
 	      particle->column_idx,
 	      "X" );
   }
+
+  attroff(COLOR_PAIR(3));
 }
 
 void update_particle( struct particle_info_t* particle,
@@ -623,7 +644,6 @@ int play( int flap,
     draw_pipe( &pipes[pipe_idx] );
     update_pipe( &pipes[pipe_idx], game_physics );
   }
-  
 
   draw_bird( bird_info );
   update_bird( bird_info, 
