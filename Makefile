@@ -1,2 +1,5 @@
-flappy_curses: flappy_curses.c
-	gcc -g -o flappy_curses flappy_curses.c -lncurses 
+flappy_term: flappy_term.c
+	gcc -g -o flappy_term flappy_term.c -lncurses 
+
+clean: 
+	rm -f flappy_term
