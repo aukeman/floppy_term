@@ -29,11 +29,25 @@ struct bird_info_t {
   float velocity_rows_per_frame;
 };
 
+struct game_physics_t {
+  float impulse_velocity_rows_per_frame;
+  float gravity_rows_per_frame_sq;
+  float pipe_velocity_columns_per_frame;
+
+  useconds_t frame_interval;
+};
+
+struct score_t {
+
+  int current;
+  int best;
+};
+
 const int number_of_rows = 30;
 const int number_of_columns = 80;
 
 const int bird_width_columns = 3;
-const char* bird = "@@@";
+const char* bird = "%@>";
 
 const char* background = 
   ". . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . \n"
@@ -79,21 +93,32 @@ const char* pipe_middle            = "|[    ]|";
 const char* upper_pipe_penultimate = "|[____]|";
 const char* upper_pipe_end         = "[[    ]]";
 
+void initialize_physics( struct game_physics_t* );
+
 void initialize_pipe( struct pipe_info_t*, int column_idx );
 void draw_pipe( const struct pipe_info_t* );
-void update_pipe( struct pipe_info_t*, float pipe_velocity_columns_per_frame );
+void update_pipe( struct pipe_info_t*, const struct game_physics_t* );
 
 enum game_state_e {
   TITLE_SCREEN,
-  INITIALIZE,
   PLAY,
   BOOM
 };
 
-void title_screen( int flap );
-void initialize( struct bird_info_t* );
-void play( struct bird_info_t*, struct pipe_info_t*, int flap );
-void boom( struct  bird_info_t*, struct pipe_info_t* );
+int title_screen( int flap, const struct score_t* );
+int initialize_game( struct bird_info_t*, 
+		     struct pipe_info_t*, 
+		     int number_of_pipes,
+		     struct score_t* );
+
+int play( int flap, 
+	  struct bird_info_t*, 
+	  struct pipe_info_t*, 
+	  int number_of_pipes, 
+	  struct score_t* score, 
+	  const struct game_physics_t* );
+
+int boom( struct bird_info_t*, struct pipe_info_t*, int number_of_pipes );
 
 void initialize_bird( struct bird_info_t*, 
 		      int row_idx,
@@ -102,8 +127,7 @@ void initialize_bird( struct bird_info_t*,
 void draw_bird( const struct bird_info_t* );
 void update_bird( struct bird_info_t*, 
 		  int flap, 
-		  float impulse_velocity_rows_per_frame,
-		  float gravity_rows_per_frame_sq );
+		  const struct game_physics_t* );
 
 enum collision_result_e {
   NONE,
@@ -116,52 +140,26 @@ enum collision_result_e check_for_collisions( const struct bird_info_t*,
 
 int main()
 {
-  int current_score = 0;
-  int best_score = 0;
+  enum game_state_e game_state = TITLE_SCREEN;
+
+  struct score_t score = { 0, 0 };
 
   useconds_t render_time = 0;
-  const useconds_t frame_interval = 80000;
-  const float frame_interval_sec = frame_interval*0.000001f;
 
   struct timeval now = { 0, 0 }; 
   struct timeval then = { 0, 0 };
 
-  float bird_velocity_rows_per_frame = 0.0f;
-
-  const float impulse_rows_per_sec = -7.5f;
-  const float impulse_rows_per_frame = 
-    impulse_rows_per_sec * frame_interval_sec;
-
-  const float gravity_rows_per_sec_sq = 0.75f;
-  const float gravity_rows_per_frame_sq = 
-    gravity_rows_per_sec_sq * frame_interval_sec;
-
-  const float pipe_velocity_columns_per_sec = -10.0f;
-  const float pipe_velocity_columns_per_frame = 
-    pipe_velocity_columns_per_sec * frame_interval_sec;
+  struct game_physics_t game_physics;
 
   struct bird_info_t bird_info;
-
-  int keep_looping = 1;
-  int flap = 0;
 
   const size_t number_of_pipes = 2;
   struct pipe_info_t pipes[number_of_pipes];
 
-  const size_t initial_pipe_column = number_of_columns;
-  const size_t pipe_spacing_columns = ((number_of_columns/2) + 
-				       (pipe_width_columns/2));
+  int keep_looping = 1;
+  int flap = 0;
 
-  size_t pipe_idx = 0;
-  for ( pipe_idx = 0;
-	pipe_idx < number_of_pipes;
-	++pipe_idx ) {
-
-    initialize_pipe( &pipes[pipe_idx], 
-		     initial_pipe_column + (pipe_idx*pipe_spacing_columns ) );
-  }
-
-  initialize_bird( &bird_info, 10, 20 );
+  initialize_physics( &game_physics );
 
   initscr();
   nodelay(stdscr, TRUE);
@@ -178,52 +176,42 @@ int main()
 
     mvprintw( 0, 0, background );
 
-    for ( pipe_idx = 0;
-	  pipe_idx < number_of_pipes;
-	  ++pipe_idx ) {
+    switch ( game_state ){
+    case TITLE_SCREEN:
 
-      draw_pipe( &pipes[pipe_idx] );
-      update_pipe( &pipes[pipe_idx], pipe_velocity_columns_per_frame );
-    }
-      
-
-    draw_bird( &bird_info );
-    update_bird( &bird_info, 
-		 flap, 
-		 impulse_rows_per_frame, 
-		 gravity_rows_per_frame_sq );
-
-    enum collision_result_e 
-      collision_result = check_for_collisions( &bird_info, 
-					       pipes, 
-					       number_of_pipes );
-    
-    switch ( collision_result ) {
-
-    case COLLISION: 
-      current_score = 0; 
-      break;
-
-    case SCORE: 
-      ++current_score; 
-      if ( best_score < current_score ) {
-	best_score = current_score;
+      if ( title_screen( flap, &score ) ){
+	initialize_game( &bird_info, pipes, number_of_pipes, &score );
+	game_state = PLAY;
       }
-
-    default:
       break;
-    }
 
-    mvprintw( number_of_rows-1, 1, "current: %d  best: %d", current_score, best_score );
+    case PLAY:
+      if ( play( flap, 
+		 &bird_info, 
+		 pipes, 
+		 number_of_pipes, 
+		 &score,
+		 &game_physics ) ){
+
+	game_state = BOOM;
+      }
+      break;
+
+    case BOOM:
+
+      if ( boom( &bird_info, pipes, number_of_pipes ) ){
+	game_state = TITLE_SCREEN;
+      }
+    }
 
     refresh();
 
     render_time = 
       (now.tv_sec - then.tv_sec) * 1000000 + (now.tv_usec - then.tv_usec);
 
-    if ( render_time < frame_interval )
+    if ( render_time < game_physics.frame_interval )
     {
-      usleep( frame_interval - render_time );
+      usleep( game_physics.frame_interval - render_time );
     }
 
     then = now;
@@ -238,6 +226,26 @@ int main()
   endwin();
 
   return 0;
+}
+
+void initialize_physics( struct game_physics_t* game_physics ) {
+
+  const float impulse_rows_per_sec = -7.5f;
+  const float gravity_rows_per_sec_sq = 0.75f;
+  const float pipe_velocity_columns_per_sec = -10.0f;
+
+  game_physics->frame_interval = 80000;
+
+  const float frame_interval_sec = game_physics->frame_interval*0.000001f;
+
+  game_physics->impulse_velocity_rows_per_frame = 
+    impulse_rows_per_sec * frame_interval_sec;
+
+  game_physics->gravity_rows_per_frame_sq = 
+    gravity_rows_per_sec_sq * frame_interval_sec;
+
+  game_physics->pipe_velocity_columns_per_frame = 
+    pipe_velocity_columns_per_sec * frame_interval_sec;
 }
 
 void initialize_pipe( struct pipe_info_t* pipe_info, int column_idx ) {
@@ -329,10 +337,12 @@ void draw_pipe( const struct pipe_info_t* pipe_info ) {
 }
 
 void update_pipe( struct pipe_info_t* pipe_info, 
-		  float pipe_velocity_columns_per_frame ){
+		  const struct game_physics_t* game_physics ){
 
-  pipe_info->left_column_fractional_idx += pipe_velocity_columns_per_frame;
-  pipe_info->right_column_fractional_idx += pipe_velocity_columns_per_frame;
+  pipe_info->left_column_fractional_idx += 
+    game_physics->pipe_velocity_columns_per_frame;
+  pipe_info->right_column_fractional_idx += 
+    game_physics->pipe_velocity_columns_per_frame;
 
   pipe_info->left_column_idx = 
     (int)(pipe_info->left_column_fractional_idx+0.5f);
@@ -369,14 +379,15 @@ void draw_bird( const struct bird_info_t* bird_info ) {
 
 void update_bird( struct bird_info_t* bird_info, 
 		  int flap,
-		  float impulse_velocity_rows_per_frame,
-		  float gravity_rows_per_frame_sq ) {
+		  const struct game_physics_t* game_physics ) {
 
   if ( flap ) {
-    bird_info->velocity_rows_per_frame = impulse_velocity_rows_per_frame;
+    bird_info->velocity_rows_per_frame = 
+      game_physics->impulse_velocity_rows_per_frame;
   }
   else {
-    bird_info->velocity_rows_per_frame += gravity_rows_per_frame_sq;
+    bird_info->velocity_rows_per_frame += 
+      game_physics->gravity_rows_per_frame_sq;
   }
 
   bird_info->row_fractional_idx += bird_info->velocity_rows_per_frame;
@@ -424,3 +435,105 @@ enum collision_result_e check_for_collisions( const struct bird_info_t* bird_inf
 
   return result;
 }
+
+int title_screen( int flap, const struct score_t* score ) {
+
+  mvprintw( 10, 20, "FLAPPY TERM" );
+  mvprintw( 12, 20, "Current Score: %d", score->current );
+  mvprintw( 14, 20, "Best Score:    %d", score->best );
+
+  mvprintw( 20, 20, "Press SPACEBAR to flap and to start game" );
+  mvprintw( 22, 20, "Press 'q' to quit" );
+
+  return (flap != 0);
+}
+
+int initialize_game( struct bird_info_t* bird_info, 
+		     struct pipe_info_t* pipes, 
+		     int number_of_pipes,
+		     struct score_t* score) {
+  
+  int result = 0;
+
+  const size_t initial_pipe_column = number_of_columns;
+  const size_t pipe_spacing_columns = ((number_of_columns/2) + 
+				       (pipe_width_columns/2));
+
+  size_t pipe_idx = 0;
+  for ( pipe_idx = 0;
+	pipe_idx < number_of_pipes;
+	++pipe_idx ) {
+
+    initialize_pipe( &pipes[pipe_idx], 
+		     initial_pipe_column + (pipe_idx*pipe_spacing_columns ) );
+  }
+
+  initialize_bird( bird_info, 10, 20 );
+
+  score->current = 0;
+
+  return result;
+}
+
+int play( int flap, 
+	  struct bird_info_t* bird_info, 
+	  struct pipe_info_t* pipes, 
+	  int number_of_pipes,
+	  struct score_t* score,
+	  const struct game_physics_t* game_physics ) {
+
+  int result = 0;
+  
+  int pipe_idx = 0;
+  for ( pipe_idx = 0;
+	pipe_idx < number_of_pipes;
+	++pipe_idx ) {
+    
+    draw_pipe( &pipes[pipe_idx] );
+    update_pipe( &pipes[pipe_idx], game_physics );
+  }
+  
+
+  draw_bird( bird_info );
+  update_bird( bird_info, 
+	       flap, 
+	       game_physics );
+  
+  enum collision_result_e 
+    collision_result = check_for_collisions( bird_info, 
+					     pipes, 
+					     number_of_pipes );
+  
+  switch ( collision_result ) {
+    
+  case COLLISION: 
+    result = 1;
+    break;
+    
+  case SCORE: 
+    ++(score->current); 
+    if ( score->best < score->current ) {
+      score->best = score->current;
+    }
+    
+  default:
+    break;
+  }
+
+  mvprintw( number_of_rows-1, 1, " current: %d  best: %d ", 
+	    score->current, 
+	    score->best);
+
+  return result;
+}
+
+int boom( struct bird_info_t* bird_info, 
+	  struct pipe_info_t* pipes, 
+	  int number_of_pipes ) {
+
+  int result = 1;
+
+
+  return result;
+}
+
