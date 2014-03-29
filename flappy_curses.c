@@ -11,8 +11,22 @@ struct pipe_info_t {
   int left_column_idx;
   int right_column_idx;
   
+  int right_column_idx_last_frame;
+
   float left_column_fractional_idx;
   float right_column_fractional_idx;
+};
+
+struct bird_info_t {
+
+  int row_idx;
+  
+  float row_fractional_idx;
+  
+  int left_column_idx;
+  int right_column_idx;
+
+  float velocity_rows_per_frame;
 };
 
 const int number_of_rows = 30;
@@ -69,13 +83,36 @@ void initialize_pipe( struct pipe_info_t*, int column_idx );
 void draw_pipe( const struct pipe_info_t* );
 void update_pipe( struct pipe_info_t*, float pipe_velocity_columns_per_frame );
 
-enum update_bird_result_e {
+enum game_state_e {
+  TITLE_SCREEN,
+  INITIALIZE,
+  PLAY,
+  BOOM
+};
+
+void title_screen( int flap );
+void initialize( struct bird_info_t* );
+void play( struct bird_info_t*, struct pipe_info_t*, int flap );
+void boom( struct  bird_info_t*, struct pipe_info_t* );
+
+void initialize_bird( struct bird_info_t*, 
+		      int row_idx,
+		      int column_idx );
+
+void draw_bird( const struct bird_info_t* );
+void update_bird( struct bird_info_t*, 
+		  int flap, 
+		  float impulse_velocity_rows_per_frame,
+		  float gravity_rows_per_frame_sq );
+
+enum collision_result_e {
   NONE,
-  HIT,
+  COLLISION,
   SCORE };
 
-/*void draw_bird( const struct bird_info_t* );*/
-/*enum update_bird_result_e update_bird */
+enum collision_result_e check_for_collisions( const struct bird_info_t*,
+					      const struct pipe_info_t*,
+					      int number_of_pipes );
 
 int main()
 {
@@ -89,8 +126,6 @@ int main()
   struct timeval now = { 0, 0 }; 
   struct timeval then = { 0, 0 };
 
-  float bird_row_fractional_idx = 10.0f;
-  const int bird_column_idx = 20;
   float bird_velocity_rows_per_frame = 0.0f;
 
   const float impulse_rows_per_sec = -7.5f;
@@ -105,6 +140,7 @@ int main()
   const float pipe_velocity_columns_per_frame = 
     pipe_velocity_columns_per_sec * frame_interval_sec;
 
+  struct bird_info_t bird_info;
 
   int keep_looping = 1;
   int flap = 0;
@@ -125,6 +161,8 @@ int main()
 		     initial_pipe_column + (pipe_idx*pipe_spacing_columns ) );
   }
 
+  initialize_bird( &bird_info, 10, 20 );
+
   initscr();
   nodelay(stdscr, TRUE);
 
@@ -135,17 +173,6 @@ int main()
   while ( keep_looping ) {
 
     gettimeofday( &now, NULL );
-
-    if ( flap ) {
-      
-      bird_velocity_rows_per_frame = impulse_rows_per_frame;
-      flap = 0;
-    }
-    else {
-      bird_velocity_rows_per_frame += gravity_rows_per_frame_sq;
-    }
-
-    bird_row_fractional_idx += bird_velocity_rows_per_frame;
 
     clear();
 
@@ -159,11 +186,35 @@ int main()
       update_pipe( &pipes[pipe_idx], pipe_velocity_columns_per_frame );
     }
       
-    mvprintw( (int)(bird_row_fractional_idx + 0.5f), 
-	      bird_column_idx, 
-	      bird );
 
-    mvprintw( 29, 1, "left col: %d; %f  right col: %d; %f", pipes[0].left_column_idx, pipes[0].left_column_fractional_idx, pipes[0].right_column_idx, pipes[0].right_column_fractional_idx );
+    draw_bird( &bird_info );
+    update_bird( &bird_info, 
+		 flap, 
+		 impulse_rows_per_frame, 
+		 gravity_rows_per_frame_sq );
+
+    enum collision_result_e 
+      collision_result = check_for_collisions( &bird_info, 
+					       pipes, 
+					       number_of_pipes );
+    
+    switch ( collision_result ) {
+
+    case COLLISION: 
+      current_score = 0; 
+      break;
+
+    case SCORE: 
+      ++current_score; 
+      if ( best_score < current_score ) {
+	best_score = current_score;
+      }
+
+    default:
+      break;
+    }
+
+    mvprintw( number_of_rows-1, 1, "current: %d  best: %d", current_score, best_score );
 
     refresh();
 
@@ -177,10 +228,11 @@ int main()
 
     then = now;
 
-    int c = getch();
+    int ch = getch();
 
-    keep_looping = ( 'q' != c );
-    flap         = ( ' ' == c );
+    keep_looping = ( 'q' != ch );
+    flap         = ( ' ' == ch );
+
   }
 
   endwin();
@@ -195,6 +247,8 @@ void initialize_pipe( struct pipe_info_t* pipe_info, int column_idx ) {
 
   pipe_info->right_column_idx = (column_idx + pipe_width_columns);
   pipe_info->right_column_fractional_idx = (column_idx + pipe_width_columns);
+
+  pipe_info->right_column_idx_last_frame = pipe_info->right_column_idx;
 
   pipe_info->opening_top_row_idx = 
     (rand() % (number_of_rows - 
@@ -283,10 +337,90 @@ void update_pipe( struct pipe_info_t* pipe_info,
   pipe_info->left_column_idx = 
     (int)(pipe_info->left_column_fractional_idx+0.5f);
 
+  pipe_info->right_column_idx_last_frame = pipe_info->right_column_idx;
+
   pipe_info->right_column_idx = 
     (int)(pipe_info->right_column_fractional_idx+0.5f);
 
   if ( pipe_info->right_column_idx < 0 ){
     initialize_pipe( pipe_info, number_of_columns );
   }
+}
+
+void initialize_bird( struct bird_info_t* bird_info,
+		      int row_idx,
+		      int column_idx ) {
+
+  bird_info->row_idx = row_idx;
+  bird_info->row_fractional_idx = row_idx;
+
+  bird_info->left_column_idx = column_idx;
+  bird_info->right_column_idx = column_idx + bird_width_columns;
+
+  bird_info->velocity_rows_per_frame = 0.0f;
+}
+
+void draw_bird( const struct bird_info_t* bird_info ) {
+
+  mvprintw( bird_info->row_idx, 
+	    bird_info->left_column_idx, 
+	    bird );
+}
+
+void update_bird( struct bird_info_t* bird_info, 
+		  int flap,
+		  float impulse_velocity_rows_per_frame,
+		  float gravity_rows_per_frame_sq ) {
+
+  if ( flap ) {
+    bird_info->velocity_rows_per_frame = impulse_velocity_rows_per_frame;
+  }
+  else {
+    bird_info->velocity_rows_per_frame += gravity_rows_per_frame_sq;
+  }
+
+  bird_info->row_fractional_idx += bird_info->velocity_rows_per_frame;
+
+  bird_info->row_idx = (int)(bird_info->row_fractional_idx + 0.5f);
+
+  if ( bird_info->row_idx < 0 ) {
+    bird_info->row_idx = 0;
+  }
+  
+  if ( number_of_rows - floor_height < bird_info->row_idx ) {
+    bird_info->row_idx = number_of_rows - floor_height;
+    bird_info->row_fractional_idx = bird_info->row_idx;
+  }
+}
+
+enum collision_result_e check_for_collisions( const struct bird_info_t* bird_info,
+					      const struct pipe_info_t* pipe_info,
+					      int number_of_pipes ) {
+
+  enum collision_result_e result = NONE;
+
+  int pipe_idx = 0;
+
+  for ( pipe_idx = 0;
+	pipe_idx < number_of_pipes;
+	++pipe_idx ){
+
+    if ( pipe_info[pipe_idx].left_column_idx <= bird_info->right_column_idx &&
+	 bird_info->left_column_idx <= pipe_info[pipe_idx].right_column_idx &&
+	 ( bird_info->row_idx <= pipe_info[pipe_idx].opening_top_row_idx ||
+	   pipe_info[pipe_idx].opening_bottom_row_idx <= bird_info->row_idx ) ) {
+      result = COLLISION;
+    }
+    else if ( ( number_of_rows - floor_height ) <= bird_info->row_idx ) {
+      result = COLLISION;
+    }
+    else if ( ( bird_info->left_column_idx == 
+		pipe_info[pipe_idx].right_column_idx_last_frame ) &&
+	      ( pipe_info[pipe_idx].right_column_idx < 
+		pipe_info[pipe_idx].right_column_idx_last_frame ) ) {
+      result = SCORE;
+    }
+  }
+
+  return result;
 }
