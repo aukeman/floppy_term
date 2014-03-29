@@ -569,7 +569,7 @@ void update_particle( struct particle_info_t* particle,
 
 int title_screen( int flap, const struct score_t* score ) {
 
-  mvprintw( 10, 20, "FLAPPY TERM" );
+  mvprintw( 10, 20, "FLOPPY TERM" );
   mvprintw( 12, 20, "Last Score: %3d", score->current );
   mvprintw( 14, 20, "Best Score: %3d", score->best );
 
