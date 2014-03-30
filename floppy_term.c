@@ -95,8 +95,8 @@ const char* background =
   ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,;";
 
 const char* bg_floor =
-  "################################################################################\n"
-  "################################################################################";
+  "////////////////////////////////////////////////////////////////////////////////\n"
+  "////////////////////////////////////////////////////////////////////////////////";
 
 const int floor_height = 2;
 
@@ -208,7 +208,7 @@ int main()
   init_pair( 1, COLOR_YELLOW, COLOR_BLACK );
   init_pair( 2, COLOR_WHITE, COLOR_GREEN );
   init_pair( 3, COLOR_RED, COLOR_BLACK );
-  init_pair( 4, COLOR_BLUE, COLOR_BLACK );
+  init_pair( 4, COLOR_CYAN, COLOR_BLACK );
   init_pair( 5, COLOR_YELLOW, COLOR_GREEN );
 
   gettimeofday( &then, NULL );
@@ -299,7 +299,7 @@ void initialize_physics( struct game_physics_t* game_physics ) {
   const float gravity_rows_per_sec_sq = 0.75f;
   const float pipe_velocity_columns_per_sec = -10.0f;
 
-  game_physics->frame_interval = 80000;
+  game_physics->frame_interval = 100000;
 
   game_physics->frame_interval_sec = game_physics->frame_interval*0.000001f;
 
@@ -595,9 +595,9 @@ void update_particle( struct particle_info_t* particle,
 
 int title_screen( int flap, const struct score_t* score ) {
 
-  mvprintw( 10, 20, "FLOPPY TERM" );
-  mvprintw( 12, 20, "Last Score: %3d", score->current );
-  mvprintw( 14, 20, "Best Score: %3d", score->best );
+  mvprintw(  5, 32, "FLOPPY TERM" );
+  mvprintw(  9, 30, "Last Score: %3d", score->current );
+  mvprintw( 11, 30, "Best Score: %3d", score->best );
 
   mvprintw( 20, 20, "Press SPACEBAR to flap and to start game" );
   mvprintw( 22, 20, "Press 'q' to quit" );
