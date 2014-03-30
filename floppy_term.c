@@ -92,7 +92,9 @@ const char* background =
   ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\n"
   ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\n"
   ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\n"
-  ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\n"
+  ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,;";
+
+const char* bg_floor =
   "################################################################################\n"
   "################################################################################";
 
@@ -188,7 +190,7 @@ int main()
   const size_t number_of_pipes = 2;
   struct pipe_info_t pipes[number_of_pipes];
 
-  const size_t number_of_particles = 10;
+  const size_t number_of_particles = 40;
   struct particle_info_t particles[number_of_particles];
 
   int keep_looping = 1;
@@ -207,6 +209,7 @@ int main()
   init_pair( 2, COLOR_WHITE, COLOR_GREEN );
   init_pair( 3, COLOR_RED, COLOR_BLACK );
   init_pair( 4, COLOR_BLUE, COLOR_BLACK );
+  init_pair( 5, COLOR_YELLOW, COLOR_GREEN );
 
   gettimeofday( &then, NULL );
   
@@ -219,6 +222,12 @@ int main()
     attron(COLOR_PAIR(4));
     mvprintw( 0, 0, background );
     attroff(COLOR_PAIR(4));
+
+    attron(COLOR_PAIR(5));
+    mvprintw( number_of_rows - floor_height, 0, bg_floor );
+    attroff(COLOR_PAIR(5));
+
+    
 
     switch ( game_state ){
     case TITLE_SCREEN:
@@ -550,8 +559,6 @@ void initialize_particles( struct particle_info_t* particles,
 
 void draw_particle( const struct particle_info_t* particle ) {
 
-  attron(COLOR_PAIR(3));
-
   if ( 0 < particle->time_to_live_frames && 
        0 < particle->row_idx && particle->row_idx < number_of_rows &&
        0 < particle->column_idx && particle->column_idx < number_of_columns ) {
@@ -560,8 +567,6 @@ void draw_particle( const struct particle_info_t* particle ) {
 	      particle->column_idx,
 	      "X" );
   }
-
-  attroff(COLOR_PAIR(3));
 }
 
 void update_particle( struct particle_info_t* particle,
@@ -692,6 +697,8 @@ int boom( struct particle_info_t* particles,
     draw_pipe( &pipes[pipe_idx] );
   }
 
+
+  attron(COLOR_PAIR(3));
   int particle_idx = 0;
   for ( particle_idx = 0;
 	particle_idx < number_of_particles;
@@ -705,6 +712,7 @@ int boom( struct particle_info_t* particles,
       result = 0;
     }
   }
+  attroff(COLOR_PAIR(3));
 
   mvprintw( number_of_rows-1, 1, " score: %d ", score->current );
 
